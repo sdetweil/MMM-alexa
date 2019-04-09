@@ -452,6 +452,7 @@ class AVS {
   }
 
   requestMic() {
+
     return new Promise((resolve, reject) => {
       this._log('Requesting microphone.');
 
@@ -461,16 +462,21 @@ class AVS {
           navigator.mozGetUserMedia || navigator.msGetUserMedia;
       }
 
-      navigator.getUserMedia({
+     var n= navigator.getUserMedia(
+      {
         audio: true
-      }, (stream) => {
+      },
+      (stream)=> {
         this._log('Microphone connected.');
         return this.connectMediaStream(stream).then(resolve);
-      }, (error) => {
-        this._log('error', error);
+      },
+      (error) =>{
+        this._log("request mic error ="+error);
+        //this._log('error', error);
         this.emit(AVS.EventTypes.ERROR, error);
         return reject(error);
       });
+      this._log("after get media n="+n);
     });
   }
 
@@ -482,7 +488,7 @@ class AVS {
         const error = new TypeError('Argument must be a `MediaStream` object.')
         this._log('error', error)
         this.emit(AVS.EventTypes.ERROR, error);
-        return reject(error);
+         reject(error);
       }
 
       this._audioContext = new AudioContext();
@@ -499,7 +505,7 @@ class AVS {
 
       this._recorder.onaudioprocess = (event) => {
         if (!this._isRecording) {
-          return false;
+          reject (false);
         }
 
         const left = event.inputBuffer.getChannelData(0);
@@ -517,7 +523,7 @@ class AVS {
       this._recorder.connect(this._audioContext.destination);
       this._log(`Media stream connected.`);
 
-      return resolve(stream);
+       resolve(stream);
     });
   }
 
@@ -527,7 +533,7 @@ class AVS {
         const error = new Error('No Media Stream connected.');
         this._log('error', error);
         this.emit(AVS.EventTypes.ERROR, error);
-        return reject(error);
+         reject(error);
       }
 
       this._isRecording = true;
@@ -536,7 +542,7 @@ class AVS {
       this._log(`Recording started.`);
       this.emit(AVS.EventTypes.RECORD_START);
 
-      return resolve();
+      resolve();
     });
   }
 
@@ -545,7 +551,7 @@ class AVS {
       if (!this._isRecording) {
         this.emit(AVS.EventTypes.RECORD_STOP);
         this._log('Recording stopped.');
-        return resolve();
+        resolve();
       }
 
       this._isRecording = false;
@@ -593,7 +599,7 @@ class AVS {
 
       this._log(`Recording stopped.`);
       this.emit(AVS.EventTypes.RECORD_STOP);
-      return resolve(view);
+      resolve(view);
     });
   }
 
@@ -633,7 +639,7 @@ class AVS {
           }
 
           this.emit(AVS.EventTypes.ERROR, error);
-          return reject(error);
+          reject(error);
         }
       };
 
@@ -4246,6 +4252,7 @@ function VoiceActivityDetector(onStart, onStop){
     };
 
     this.startDetection = function(){
+         console.log("start voice detection")
         self.listening = true;
         self.firstWordSpoken = false;
         self._clearTimeout();
@@ -4320,16 +4327,29 @@ function alexaRunner(config, sendNotification){
     this.notificationReceived = function(notification){
         setStatus(self, notification);
 
-        if(notification === 'ALEXA_START_RECORDING'){
+        if(notification === 'ALEXA_START_RECORDING' || notification==='ASSISTANT_ACTIVATE'){
             if(!self.listening){
                 self.listening = true;
-                self.avs.startRecording();
+                self.avs.requestMic().then(
+                () =>
+                { 
+                  //self._log("request mic successful");
+                  self.avs.startRecording();
 
-                if(self.voiceActivityDetector){
-                    setTimeout(function(){
-                        self.voiceActivityDetector.startDetection();
-                    }, 1000);
-                }
+                  if(self.voiceActivityDetector){
+                      setTimeout(function(){
+                          self.voiceActivityDetector.initialize();
+                          self.voiceActivityDetector.startDetection();
+                      }, 1000);
+                  }
+                },
+                (error)=>{ 
+                   //self._log("request mic failed = "+ error);
+                   self.listening = false;
+                }).catch(( err) =>{
+                  //self._log("get media error="+err);
+                  self.listening = false;
+                })
             }
         }else if(notification === 'ALEXA_STOP_RECORDING'){
             if(self.listening){
@@ -4341,18 +4361,21 @@ function alexaRunner(config, sendNotification){
 
                 processSpeech(self).then(({directives, audioMap}) => {
                     runDirectives(self, directives, audioMap);
+                     self.sendNotification("HOTWORD_RESUME");
                 });
+               
             }
-
         }
     };
 
     this.initialize = function(){
         initializeAVS(self).then(() => {
             if(!self.config['disableVoiceActivityDetection']){
-                self.voiceActivityDetector = new VoiceActivityDetector(function(){
+                self.voiceActivityDetector = new VoiceActivityDetector(
+                function(){
                     self.sendNotification('ALEXA_VAD_VOICE_DETECTION_START');
-                }, function(){
+                }, 
+                function(){
                     self.sendNotification('ALEXA_VAD_VOICE_DETECTION_STOP');
                     self.sendNotification('ALEXA_STOP_RECORDING');
                 });
@@ -4407,12 +4430,12 @@ function initializeAVS(alexaRunner){
             alexaRunner.avs.getTokenFromCode(alexaRunner.config['avsInitialCode'])
                 .then(() => alexaRunner.avs.refreshToken())
                 .then(() => self.saveTokens())
-                .then(() => alexaRunner.avs.requestMic())
+                //.then(() => alexaRunner.avs.requestMic())
                 .catch((error) => {console.log(error);});
         }else{
             alexaRunner.avs.refreshToken()
                 .then(() => self.saveTokens())
-                .then(() => alexaRunner.avs.requestMic())
+                //.then(() => alexaRunner.avs.requestMic())
                 .catch((error) => {console.log(error);});
         }
     };
