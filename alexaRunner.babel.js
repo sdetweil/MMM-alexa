@@ -4361,10 +4361,15 @@ function alexaRunner(config, sendNotification){
                     self.voiceActivityDetector.stopDetection();
                 }
 
-                processSpeech(self).then(({directives, audioMap}) => {
+                processSpeech(self).then(
+                   ({directives, audioMap}) => {
                     runDirectives(self, directives, audioMap);
                      self.sendNotification("HOTWORD_RESUME");
-                });
+                   },
+                   (error) => {
+                     self.sendNotification("HOTWORD_RESUME");
+                   }
+                );
                
             }
         }
@@ -4492,7 +4497,9 @@ function processSpeech(alexaRunner){
                     });
                     resolve({directives, audioMap});
                 }
-            }).catch(error => { console.error(error); /* send audio error */ });
+            }).catch( 
+              (error) => { console.error(error); reject(error); /* send audio error */ }
+            );
         });
     });
 }
