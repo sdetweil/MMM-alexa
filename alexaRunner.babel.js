@@ -488,10 +488,10 @@ class AVS {
         const error = new TypeError('Argument must be a `MediaStream` object.')
         this._log('error', error)
         this.emit(AVS.EventTypes.ERROR, error);
-         reject(error);
+         return reject(error);
       }
-
-      this._audioContext = new AudioContext();
+      if(this._audioContext==null)
+        this._audioContext = new AudioContext();
       this._sampleRate = this._audioContext.sampleRate;
 
       this._log(`Sample rate: ${this._sampleRate}.`);
@@ -505,7 +505,7 @@ class AVS {
 
       this._recorder.onaudioprocess = (event) => {
         if (!this._isRecording) {
-          reject (false);
+          return false;
         }
 
         const left = event.inputBuffer.getChannelData(0);
@@ -523,7 +523,7 @@ class AVS {
       this._recorder.connect(this._audioContext.destination);
       this._log(`Media stream connected.`);
 
-       resolve(stream);
+      return resolve(stream);
     });
   }
 
@@ -533,7 +533,7 @@ class AVS {
         const error = new Error('No Media Stream connected.');
         this._log('error', error);
         this.emit(AVS.EventTypes.ERROR, error);
-         reject(error);
+        return reject(error);
       }
 
       this._isRecording = true;
@@ -542,7 +542,7 @@ class AVS {
       this._log(`Recording started.`);
       this.emit(AVS.EventTypes.RECORD_START);
 
-      resolve();
+      return resolve();
     });
   }
 
@@ -551,7 +551,7 @@ class AVS {
       if (!this._isRecording) {
         this.emit(AVS.EventTypes.RECORD_STOP);
         this._log('Recording stopped.');
-        resolve();
+        return resolve();
       }
 
       this._isRecording = false;
@@ -597,9 +597,9 @@ class AVS {
         index += 2;
       }
 
-      this._log(`Recording stopped.`);
+      this._log('Recording stopped.');
       this.emit(AVS.EventTypes.RECORD_STOP);
-      resolve(view);
+      return resolve(view);
     });
   }
 
@@ -639,7 +639,7 @@ class AVS {
           }
 
           this.emit(AVS.EventTypes.ERROR, error);
-          reject(error);
+          return reject(error);
         }
       };
 
@@ -4262,7 +4262,7 @@ function VoiceActivityDetector(onStart, onStop){
                 // timeout
                 self._onVoiceStop();
             }
-        }, 3000);
+        }, 8000);
     };
 
     this.stopDetection = function(){
@@ -4333,15 +4333,17 @@ function alexaRunner(config, sendNotification){
                 self.avs.requestMic().then(
                 () =>
                 { 
-                  //self._log("request mic successful");
-                  self.avs.startRecording();
-
-                  if(self.voiceActivityDetector){
+                  self.sendNotification("HOTWORD_PAUSE");
+                  //if(self.voiceActivityDetector)
+                  //   self.voiceActivityDetector.initialize();
+                 // setTimeout(function(){ 
+                    self.avs.startRecording();
+                    if(self.voiceActivityDetector){
                       setTimeout(function(){
-                          self.voiceActivityDetector.initialize();
                           self.voiceActivityDetector.startDetection();
                       }, 1000);
-                  }
+                    }
+                 // }, 1000)
                 },
                 (error)=>{ 
                    //self._log("request mic failed = "+ error);
@@ -4369,7 +4371,9 @@ function alexaRunner(config, sendNotification){
     };
 
     this.initialize = function(){
+      Log.log( "in runner initialize");
         initializeAVS(self).then(() => {
+          Log.log( "after initializeAVS disableVoiceActivityDetection="+self.config['disableVoiceActivityDetection']);
             if(!self.config['disableVoiceActivityDetection']){
                 self.voiceActivityDetector = new VoiceActivityDetector(
                 function(){
@@ -4381,7 +4385,7 @@ function alexaRunner(config, sendNotification){
                 });
                 self.voiceActivityDetector.initialize();
             }
-
+            Log.log( "sending Alexa_created");
             self.sendNotification('ALEXA_CREATED');
         });
     };
@@ -4562,8 +4566,8 @@ function runDirectives(alexaRunner, directives, audioMap){
             }else{
                 setTimeout(function(){
                     self.alexaRunner.sendNotification('ALEXA_START_RECORDING');
-                }, 2000);
-            }
+                }, timeout); // was 2000
+             }
         }();
     };
 
