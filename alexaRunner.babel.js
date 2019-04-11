@@ -62,6 +62,7 @@ class AVS {
     this._deviceSerialNumber = null;
     this._redirectUri = null;
     this._audioQueue = [];
+    this._runner = options.runner;
 
     if (options.token) {
       this.setToken(options.token);
@@ -95,7 +96,7 @@ class AVS {
       this.setDebug(options.debug);
     }
 
-    this.player = new Player();
+    this.player = new Player({runner: this._runner});
   }
 
   _log(type, message) {
@@ -607,7 +608,7 @@ class AVS {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const url = 'https://access-alexa-na.amazon.com/v1/avs/speechrecognizer/recognize';
-
+      this._runner.sendNotification('SENDING_TO_AMAZON'); // REMARK 2
       xhr.open('POST', url, true);
       xhr.responseType = 'arraybuffer';
       xhr.onload = (event) => {
@@ -811,13 +812,14 @@ const arrayBufferToAudioBuffer = require('./utils/arrayBufferToAudioBuffer');
 const toString = Object.prototype.toString;
 
 class Player {
-  constructor() {
+  constructor(options) {
     window.AudioContext = window.AudioContext || window.webkitAudioContext;
 
     this._queue = [];
     this._currentSource = null;
     this._currentBuffer = null;
     this._context = new AudioContext();
+    this._runner = options.runner;
 
     Observable(this);
   }
@@ -905,15 +907,16 @@ class Player {
         this.emit(Player.EventTypes.PLAY);
         resolve();
       } else if (this._audio && this._audio.paused) {
-        this._log('Play audio');
+        this._log('Play audio');        
         this.emit(Player.EventTypes.PLAY);
         this._audio.play();
         resolve();
       } else {
         return this.deque()
-        .then(audioBuffer => {
+        .then((audioBuffer) => {
           this._log('Play audio');
           this.emit(Player.EventTypes.PLAY);
+          this._runner.sendNotification('AMAZON_SPEAKS'); // REMARK 1          
           if (typeof audioBuffer === 'string') {
             return this.playUrl(audioBuffer);
           }
@@ -4364,7 +4367,7 @@ function alexaRunner(config, sendNotification){
                 processSpeech(self).then(
                    ({directives, audioMap}) => {
                     runDirectives(self, directives, audioMap);
-                     self.sendNotification("HOTWORD_RESUME");
+//                     self.sendNotification("HOTWORD_RESUME");
                    },
                    (error) => {
                      self.sendNotification("HOTWORD_RESUME");
@@ -4410,7 +4413,8 @@ function initializeAVS(alexaRunner){
             deviceSerialNumber: 1234,
             token: localStorage.getItem('avsToken'),
             redirectUri: 'https://sakirtemel.github.io/MMM-alexa/',
-            refreshToken: localStorage.getItem('avsRefreshToken')
+            refreshToken: localStorage.getItem('avsRefreshToken'),
+            runner: alexaRunner
         });
 
         alexaRunner.avs.on(AVS.EventTypes.TOKEN_SET, function(){
@@ -4566,18 +4570,22 @@ function runDirectives(alexaRunner, directives, audioMap){
         // beep
 
         return function(){
+
+             
             if (directives.length > 1){
-                self.alexaRunner.avs.player.one(AVS.Player.EventTypes.ENDED, () => {
+                self.alexaRunner.avs.player.on(AVS.Player.EventTypes.ENDED, () => {  // was .one
                     self.alexaRunner.sendNotification('ALEXA_START_RECORDING');
                 });
             }else{
                 setTimeout(function(){
                     self.alexaRunner.sendNotification('ALEXA_START_RECORDING');
                 }, timeout); // was 2000
-             }
+             } 
         }();
     };
-
+    self.alexaRunner.avs.player.on(AVS.Player.EventTypes.ENDED, () => {  // was .one
+        self.alexaRunner.sendNotification('HOTWORD_RESUME');
+    });
     var promises = [];
 
     // directive running
