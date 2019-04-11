@@ -4367,7 +4367,6 @@ function alexaRunner(config, sendNotification){
                 processSpeech(self).then(
                    ({directives, audioMap}) => {
                     runDirectives(self, directives, audioMap);
-//                     self.sendNotification("HOTWORD_RESUME");
                    },
                    (error) => {
                      self.sendNotification("HOTWORD_RESUME");
@@ -4375,6 +4374,8 @@ function alexaRunner(config, sendNotification){
                 );
                
             }
+        } else if(notification === 'ALEXA_PLAY_COMPLETED'){
+          self.sendNotification("HOTWORD_RESUME");
         }
     };
 
@@ -4584,7 +4585,7 @@ function runDirectives(alexaRunner, directives, audioMap){
         }();
     };
     self.alexaRunner.avs.player.on(AVS.Player.EventTypes.ENDED, () => {  // was .one
-        self.alexaRunner.sendNotification('HOTWORD_RESUME');
+        self.alexaRunner.sendNotification('ALEXA_PLAY_COMPLETED');
     });
     var promises = [];
 
